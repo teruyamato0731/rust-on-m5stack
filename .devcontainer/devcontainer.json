@@ -1,0 +1,17 @@
+{
+	"name": "rust-on-gray",
+	"dockerComposeFile": [
+		"docker-compose.yml"
+	],
+	"service": "rust-on-gray",
+	"workspaceFolder": "/workspaces/rust-on-gray",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"serayuzgur.crates"
+			]
+		}
+	}
+}
