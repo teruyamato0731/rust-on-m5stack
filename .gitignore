@@ -1,4 +1,6 @@
-debug/
-target/
-Cargo.lock
+/.vscode
+/.embuild
+/debug
+/target
+/Cargo.lock
 **/*.rs.bk
