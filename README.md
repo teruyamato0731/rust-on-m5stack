@@ -1,4 +1,4 @@
-# rust-on-gray
+# rust-on-m5stack
 
 ```bash
 # generate project from template

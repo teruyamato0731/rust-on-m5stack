@@ -1,10 +1,10 @@
 {
-	"name": "rust-on-gray",
+	"name": "rust-on-m5stack",
 	"dockerComposeFile": [
 		"docker-compose.yml"
 	],
-	"service": "rust-on-gray",
-	"workspaceFolder": "/workspaces/rust-on-gray",
+	"service": "rust-on-m5stack",
+	"workspaceFolder": "/workspaces/rust-on-m5stack",
 	"customizations": {
 		"vscode": {
 			"extensions": [
