@@ -83,22 +83,22 @@ fn imu_read_accel(i2c_master: &mut I2cDriver) -> (f32, f32, f32) {
         .unwrap();
     let mut buffer = [0; 6];
     i2c_master.read(SLAVE_ADDR, &mut buffer, BLOCK).unwrap();
-    return (
+    (
         conv((buffer[0] as i16) << 8 | buffer[1] as i16, 4.0 * 9.8),
         conv((buffer[2] as i16) << 8 | buffer[3] as i16, 4.0 * 9.8),
         conv((buffer[4] as i16) << 8 | buffer[5] as i16, 4.0 * 9.8),
-    );
+    )
 }
 
 fn imu_read_gyro(i2c_master: &mut I2cDriver) -> (f32, f32, f32) {
     i2c_master.write(SLAVE_ADDR, &[GYRO_XOUT_H], BLOCK).unwrap();
     let mut buffer = [0; 6];
     i2c_master.read(SLAVE_ADDR, &mut buffer, BLOCK).unwrap();
-    return (
+    (
         conv((buffer[0] as i16) << 8 | buffer[1] as i16, 500.0),
         conv((buffer[2] as i16) << 8 | buffer[3] as i16, 500.0),
         conv((buffer[4] as i16) << 8 | buffer[5] as i16, 500.0),
-    );
+    )
 }
 
 fn conv(representation: i16, scale: f32) -> f32 {
