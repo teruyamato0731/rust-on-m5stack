@@ -33,7 +33,7 @@ jobs:
         with:
           default: true
           buildtargets: esp32
-          ldproxy: false
+          ldproxy: true
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
       - name: Run command
