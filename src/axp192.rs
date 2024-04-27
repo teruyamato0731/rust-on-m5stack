@@ -23,6 +23,7 @@
 
 // #![warn(rust_2018_idioms)]
 // #![no_std]
+#![allow(dead_code)]
 
 // use embedded_hal::blocking::i2c;
 use embedded_hal::i2c::I2c;
