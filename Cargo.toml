@@ -36,9 +36,11 @@ embedded-hal = { version = "1.0" }
 display-interface-spi = { version = "0.4.1" }
 ili9341 = { version = "0.6" }
 embedded-graphics = { version = "0.8" }
-mipidsi = { version = "*" }
-# axp192 = { version = "*" }
-embedded-hal-bus = { version = "*" }
+mipidsi = { version = "0.7.1" }
+embedded-hal-bus = { version = "0.2.0" }
+embedded-can = "0.4.1"
+anyhow = "1.0.86"
+nb = "1.1.0"
 
 [build-dependencies]
 embuild = "0.31.3"

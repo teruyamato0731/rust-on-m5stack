@@ -1,5 +1,19 @@
 mod axp192;
+mod mcp2515;
 
+use anyhow::Context as _;
+use axp192::Axp192;
+use core::cell::RefCell;
+use display_interface_spi::SPIInterfaceNoCS;
+use embedded_can::nb::Can;
+use embedded_can::{Frame, StandardId};
+use embedded_graphics::{
+    mono_font::{ascii, MonoTextStyle},
+    pixelcolor::Rgb565,
+    prelude::*,
+    text::Text,
+};
+use embedded_hal_bus::i2c;
 use esp_idf_hal::{
     delay::FreeRtos,
     gpio::{AnyIOPin, PinDriver},
@@ -10,18 +24,8 @@ use esp_idf_hal::{
     sys::EspError,
     units::Hertz,
 };
-
-use display_interface_spi::SPIInterfaceNoCS;
-use embedded_graphics::{
-    mono_font::{ascii, MonoTextStyle},
-    pixelcolor::Rgb565,
-    prelude::*,
-    text::Text,
-};
-
-use axp192::Axp192;
-use core::cell::RefCell;
-use embedded_hal_bus::i2c;
+use mcp2515::{CanFrame, MCP2515};
+use std::time::Instant;
 
 const SLAVE_ADDR: u8 = 0x68;
 
@@ -40,8 +44,11 @@ fn main() {
     run().unwrap();
 }
 
-fn run() -> Result<(), EspError> {
+fn run() -> anyhow::Result<()> {
     let peripherals = Peripherals::take()?;
+
+    // setup
+    println!("setup start!");
 
     let i2c_master = i2c_master_init(
         peripherals.i2c0,
@@ -52,17 +59,24 @@ fn run() -> Result<(), EspError> {
 
     let i2c_ref_cell = RefCell::new(i2c_master);
 
-    imu_init(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
-
     // let mut axp = Axp192::new(i2c_master);
     let mut axp = Axp192::new(i2c::RefCellDevice::new(&i2c_ref_cell));
     m5sc2_init(&mut axp, &mut FreeRtos).unwrap();
+
+    // 電源の設定完了
+    println!("Power setup done!");
+
+    imu_init(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
+
+    // IMUの設定完了
+    println!("IMU setup done!");
 
     let spi = peripherals.spi2;
     let sclk = peripherals.pins.gpio18;
     let serial_in = peripherals.pins.gpio38; // SDI
     let serial_out = peripherals.pins.gpio23; // SDO
-    let cs_1 = peripherals.pins.gpio5;
+    let cs_lcd = peripherals.pins.gpio5;
+    let cs_can = peripherals.pins.gpio27;
 
     let driver = SpiDriver::new(
         spi,
@@ -73,8 +87,16 @@ fn run() -> Result<(), EspError> {
     )?;
 
     let config = SpiConfig::new().baudrate(20.MHz().into());
-    let lcd_spi_master = SpiDeviceDriver::new(&driver, Some(cs_1), &config)?;
+    let can_spi_master = SpiDeviceDriver::new(&driver, Some(cs_can), &config)?;
 
+    let mut can = MCP2515::new(can_spi_master);
+    can.init(&mut esp_idf_hal::delay::FreeRtos)?;
+    can.set_mode(mcp2515::Mode::Loopback, &mut esp_idf_hal::delay::FreeRtos)?;
+
+    // CANの設定完了
+    println!("CAN setup done!");
+
+    let lcd_spi_master = SpiDeviceDriver::new(&driver, Some(cs_lcd), &config)?;
     let dc = PinDriver::output(peripherals.pins.gpio15)?;
     let spi_iface = SPIInterfaceNoCS::new(lcd_spi_master, dc);
 
@@ -88,6 +110,9 @@ fn run() -> Result<(), EspError> {
         )
         .unwrap();
 
+    // LCDの設定完了
+    println!("LCD setup done!");
+
     // Make the display all green
     display.clear(Rgb565::GREEN).unwrap();
     // Draw with embedded_graphics
@@ -100,12 +125,40 @@ fn run() -> Result<(), EspError> {
     .draw(&mut display)
     .unwrap();
 
+    let mut pre = Instant::now();
     loop {
         let acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
         let gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
         print!("acc x:{:6.2}, y:{:6.2}, z:{:6.2} ", acc.0, acc.1, acc.2);
         print!("gyro x:{:4.0}, y:{:4.0}, z:{:4.0} ", gyro.0, gyro.1, gyro.2);
         println!();
+
+        // Receive a message
+        match can.receive() {
+            Ok(frame) => println!("Received frame {:?}", frame),
+            Err(nb::Error::WouldBlock) => {
+                // println!("No message to read!")
+            }
+            Err(e) => println!("Error receiving frame: {:?}", e),
+        }
+
+        // Send a message every 500 ms
+        let wait = core::time::Duration::from_millis(500);
+        if pre.elapsed() > wait {
+            pre = Instant::now();
+
+            // Send a message
+            let frame = CanFrame::new(
+                StandardId::new(0x200).context("Failed to create standard ID")?,
+                &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            )
+            .context("Failed to create frame")?;
+            if let Err(e) = can.transmit(&frame) {
+                println!("Error sending frame: {:?}", e);
+            } else {
+                println!("Sent frame {:?}", frame);
+            }
+        }
 
         FreeRtos::delay_ms(30);
     }
