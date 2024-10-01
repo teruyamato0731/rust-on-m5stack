@@ -1,7 +1,7 @@
 mod axp192;
 mod mcp2515;
 
-use anyhow::anyhow;
+use anyhow::Context as _;
 use axp192::Axp192;
 use core::cell::RefCell;
 use display_interface_spi::SPIInterfaceNoCS;
@@ -37,31 +37,6 @@ const PWR_MGMT_1: u8 = 0x6B;
 const ACCEL_XOUT_H: u8 = 0x3B;
 const GYRO_XOUT_H: u8 = 0x43;
 
-struct C620 {
-    pwm: [i16; 8],
-}
-
-impl C620 {
-    const PWM_MAX: i16 = 16000;
-
-    fn new() -> Self {
-        Self { pwm: [0; 8] }
-    }
-    fn to_msgs(&self) -> [CanFrame; 2] {
-        let mut data = [[0; 8]; 2];
-        for i in 0..4 {
-            data[0][2 * i] = (self.pwm[i] >> 8) as u8;
-            data[0][2 * i + 1] = self.pwm[i] as u8;
-            data[1][2 * i] = (self.pwm[4 + i] >> 8) as u8;
-            data[1][2 * i + 1] = self.pwm[4 + i] as u8;
-        }
-        [
-            CanFrame::new(StandardId::new(0x200).unwrap(), &data[0]).unwrap(),
-            CanFrame::new(StandardId::new(0x199).unwrap(), &data[1]).unwrap(),
-        ]
-    }
-}
-
 fn main() {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
@@ -73,7 +48,7 @@ fn run() -> anyhow::Result<()> {
     let peripherals = Peripherals::take()?;
 
     // setup
-    log::debug!("setup start!");
+    println!("setup start!");
 
     let i2c_master = i2c_master_init(
         peripherals.i2c0,
@@ -86,15 +61,15 @@ fn run() -> anyhow::Result<()> {
 
     // let mut axp = Axp192::new(i2c_master);
     let mut axp = Axp192::new(i2c::RefCellDevice::new(&i2c_ref_cell));
-    m5sc2_init(&mut axp, &mut FreeRtos)?;
+    m5sc2_init(&mut axp, &mut FreeRtos).unwrap();
 
     // 電源の設定完了
-    log::debug!("Power setup done!");
+    println!("Power setup done!");
 
-    imu_init(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+    imu_init(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
 
     // IMUの設定完了
-    log::debug!("IMU setup done!");
+    println!("IMU setup done!");
 
     let spi = peripherals.spi2;
     let sclk = peripherals.pins.gpio18;
@@ -111,15 +86,15 @@ fn run() -> anyhow::Result<()> {
         &SpiDriverConfig::new(),
     )?;
 
-    let config = SpiConfig::new().baudrate(10.MHz().into());
+    let config = SpiConfig::new().baudrate(20.MHz().into());
     let can_spi_master = SpiDeviceDriver::new(&driver, Some(cs_can), &config)?;
 
     let mut can = MCP2515::new(can_spi_master);
     can.init(&mut esp_idf_hal::delay::FreeRtos)?;
-    can.set_mode(mcp2515::Mode::Normal, &mut esp_idf_hal::delay::FreeRtos)?;
+    can.set_mode(mcp2515::Mode::Loopback, &mut esp_idf_hal::delay::FreeRtos)?;
 
     // CANの設定完了
-    log::debug!("CAN setup done!");
+    println!("CAN setup done!");
 
     let lcd_spi_master = SpiDeviceDriver::new(&driver, Some(cs_lcd), &config)?;
     let dc = PinDriver::output(peripherals.pins.gpio15)?;
@@ -133,15 +108,13 @@ fn run() -> anyhow::Result<()> {
             &mut esp_idf_hal::delay::FreeRtos,
             None::<PinDriver<esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>>,
         )
-        .map_err(|e| anyhow!("Error initializing display: {:?}", e))?;
+        .unwrap();
 
     // LCDの設定完了
-    log::debug!("LCD setup done!");
+    println!("LCD setup done!");
 
     // Make the display all green
-    display
-        .clear(Rgb565::GREEN)
-        .map_err(|e| anyhow!("Error clearing display: {:?}", e))?;
+    display.clear(Rgb565::GREEN).unwrap();
     // Draw with embedded_graphics
     Text::with_alignment(
         "hinge",
@@ -150,30 +123,23 @@ fn run() -> anyhow::Result<()> {
         embedded_graphics::text::Alignment::Center,
     )
     .draw(&mut display)
-    .map_err(|e| anyhow!("Error drawing text: {:?}", e))?;
-
-    let mut c620 = C620::new();
-
-    for e in c620.pwm.iter_mut() {
-        *e = -C620::PWM_MAX / 4;
-    }
-    println!("{:?}", c620.pwm);
+    .unwrap();
 
     let mut pre = Instant::now();
     loop {
-        let acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
-        let gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+        let acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
+        let gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell)).unwrap();
         print!("acc x:{:6.2}, y:{:6.2}, z:{:6.2} ", acc.0, acc.1, acc.2);
         print!("gyro x:{:4.0}, y:{:4.0}, z:{:4.0} ", gyro.0, gyro.1, gyro.2);
         println!();
 
         // Receive a message
         match can.receive() {
-            Ok(frame) => log::info!("Received frame {:?}", frame),
+            Ok(frame) => println!("Received frame {:?}", frame),
             Err(nb::Error::WouldBlock) => {
-                log::trace!("No message to read!")
+                // println!("No message to read!")
             }
-            Err(e) => log::error!("Error receiving frame: {:?}", e),
+            Err(e) => println!("Error receiving frame: {:?}", e),
         }
 
         // Send a message every 500 ms
@@ -181,13 +147,16 @@ fn run() -> anyhow::Result<()> {
         if pre.elapsed() > wait {
             pre = Instant::now();
 
-            let frames = c620.to_msgs();
-            for frame in frames.iter() {
-                if let Err(e) = can.transmit(frame) {
-                    log::error!("Error sending frame: {:?}", e);
-                } else {
-                    log::info!("Sent frame {:?}", frame);
-                }
+            // Send a message
+            let frame = CanFrame::new(
+                StandardId::new(0x200).context("Failed to create standard ID")?,
+                &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            )
+            .context("Failed to create frame")?;
+            if let Err(e) = can.transmit(&frame) {
+                println!("Error sending frame: {:?}", e);
+            } else {
+                println!("Sent frame {:?}", frame);
             }
         }
 
@@ -213,7 +182,7 @@ where
     i2c_master.write(SLAVE_ADDR, &[WHOAMI])?;
     let mut tmp = [0];
     i2c_master.read(SLAVE_ADDR, &mut tmp)?;
-    log::debug!("WHOAMI: {:#X}", tmp[0]);
+    println!("WHOAMI: {:#X}", tmp[0]);
     assert_eq!(tmp[0], 0x19);
 
     // reset

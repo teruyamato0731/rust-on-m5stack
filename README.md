@@ -9,4 +9,10 @@ cargo build
 cargo run
 ```
 
+runner = "espflash flash --baud=921600 --monitor /dev/ttyUSB0"
+
 https://zenn.dev/teruyamato0731/scraps/eaf1afddd92124
+
+環境変数
+ESPFLASH_PORT
+ESPFLASH_BAUD
