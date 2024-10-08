@@ -15,17 +15,19 @@ use embedded_graphics::{
 };
 use embedded_hal_bus::i2c;
 use esp_idf_hal::{
-    delay::FreeRtos,
+    delay::{FreeRtos, TickType},
     gpio::{AnyIOPin, PinDriver},
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
     prelude::*,
     spi::{SpiConfig, SpiDeviceDriver, SpiDriver, SpiDriverConfig},
     sys::EspError,
+    uart::{UartConfig, UartDriver},
     units::Hertz,
 };
 use mcp2515::{CanFrame, MCP2515};
 use std::time::Instant;
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 const SLAVE_ADDR: u8 = 0x68;
 
@@ -62,9 +64,25 @@ impl C620 {
     }
 }
 
+// 状態変数 x, \dot{x}, \theta, \theta
+#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
+#[repr(C)]
+struct State {
+    x: f32,
+    dx: f32,
+    theta: f32,
+    dtheta: f32,
+}
+
+#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
+#[repr(C)]
+struct Control {
+    u: i16,
+}
+
 fn main() {
     esp_idf_svc::sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
+    // esp_idf_svc::log::EspLogger::initialize_default();
 
     run().unwrap();
 }
@@ -138,6 +156,19 @@ fn run() -> anyhow::Result<()> {
     // LCDの設定完了
     log::debug!("LCD setup done!");
 
+    // UARTの初期化
+    let tx = peripherals.pins.gpio1;
+    let rx = peripherals.pins.gpio3;
+    let uart_config = UartConfig::new().baudrate(Hertz(115_200));
+    let uart = UartDriver::new(
+        peripherals.uart0,
+        tx,
+        rx,
+        Option::<esp_idf_hal::gpio::Gpio0>::None,
+        Option::<esp_idf_hal::gpio::Gpio1>::None,
+        &uart_config,
+    )?;
+
     // Make the display all green
     display
         .clear(Rgb565::GREEN)
@@ -157,15 +188,15 @@ fn run() -> anyhow::Result<()> {
     for e in c620.pwm.iter_mut() {
         *e = -C620::PWM_MAX / 4;
     }
-    println!("{:?}", c620.pwm);
+    log::debug!("{:?}", c620.pwm);
 
     let mut pre = Instant::now();
     loop {
-        let acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
-        let gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
-        print!("acc x:{:6.2}, y:{:6.2}, z:{:6.2} ", acc.0, acc.1, acc.2);
-        print!("gyro x:{:4.0}, y:{:4.0}, z:{:4.0} ", gyro.0, gyro.1, gyro.2);
-        println!();
+        let _acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+        let _gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+        // print!("acc x:{:6.2}, y:{:6.2}, z:{:6.2} ", acc.0, acc.1, acc.2);
+        // print!("gyro x:{:4.0}, y:{:4.0}, z:{:4.0} ", gyro.0, gyro.1, gyro.2);
+        // println!();
 
         // Receive a message
         match can.receive() {
@@ -175,6 +206,22 @@ fn run() -> anyhow::Result<()> {
             }
             Err(e) => log::error!("Error receiving frame: {:?}", e),
         }
+
+        // UARTからデータを読み取る
+        let mut buf = [0u8; 4];
+        let timeout = TickType::new_millis(1000);
+        let len = uart.read(&mut buf, timeout.into())?;
+        // println!("Received from UART: {:?}, len: {}", buf, len);
+
+        // 4バイトの正常なデータを受信したら、制御入力として解釈
+        let control = if len == 4 && buf[3] == 0 {
+            let (buf, _): ([u8; 2], usize) = cobs_rs::unstuff(buf, 0);
+            Control::read_from(&buf).unwrap()
+        } else {
+            Control { u: 0 }
+        };
+
+        c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
 
         // Send a message every 500 ms
         let wait = core::time::Duration::from_millis(500);
@@ -189,9 +236,31 @@ fn run() -> anyhow::Result<()> {
                     log::info!("Sent frame {:?}", frame);
                 }
             }
+
+            // 状態変数を送信
+            let s = State {
+                x: 1.2,
+                dx: 3.4,
+                theta: 5.6,
+                dtheta: 7.8,
+            };
+            let buf = s.as_bytes();
+            let cobs = cobs_rs::stuff::<16, 18>(buf.try_into().unwrap(), 0);
+            let _len = uart.write(&cobs)?;
+
+            display.clear(Rgb565::BLACK).unwrap();
+            // Draw with embedded_graphics
+            Text::with_alignment(
+                &format!("control: {}, {}", control.u, c620.pwm[0]),
+                Point::new(160, 120),
+                MonoTextStyle::new(&ascii::FONT_9X18_BOLD, RgbColor::WHITE),
+                embedded_graphics::text::Alignment::Center,
+            )
+            .draw(&mut display)
+            .unwrap();
         }
 
-        FreeRtos::delay_ms(30);
+        // FreeRtos::delay_ms(30);
     }
 }
 
