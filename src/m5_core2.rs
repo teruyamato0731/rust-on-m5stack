@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::axp192;
 use esp_idf_hal::{
     delay::FreeRtos,
@@ -9,11 +11,11 @@ use esp_idf_hal::{
     units::Hertz,
 };
 
-struct Power<'a> {
+pub struct Power<'a> {
     axp: Option<axp192::Axp192<I2cDriver<'a>>>,
 }
-struct Lcd {}
-struct Imu {}
+pub struct Lcd {}
+pub struct Imu {}
 
 pub struct M5Core2<'a> {
     pub power: Power<'a>,
@@ -51,7 +53,7 @@ impl<'a> Power<'a> {
     }
 }
 
-fn i2c_master_init<'d>(
+pub fn i2c_master_init<'d>(
     i2c: impl Peripheral<P = impl I2c> + 'd,
     sda: AnyIOPin,
     scl: AnyIOPin,
@@ -62,7 +64,7 @@ fn i2c_master_init<'d>(
     Ok(driver)
 }
 
-fn m5sc2_init<I2C>(
+pub fn m5sc2_init<I2C>(
     axp: &mut axp192::Axp192<I2C>,
     delay: &mut impl embedded_hal::delay::DelayNs,
 ) -> Result<(), I2C::Error>
