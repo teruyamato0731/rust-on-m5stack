@@ -14,12 +14,6 @@ struct State {
     dtheta: f32,
 }
 
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
-#[repr(C)]
-struct Control {
-    u: i16,
-}
-
 fn main() {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();

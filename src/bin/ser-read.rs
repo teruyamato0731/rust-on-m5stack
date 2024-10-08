@@ -17,16 +17,6 @@ use esp_idf_hal::{
 };
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
-// 状態変数 x, \dot{x}, \theta, \theta
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
-#[repr(C)]
-struct State {
-    x: f32,
-    dx: f32,
-    theta: f32,
-    dtheta: f32,
-}
-
 #[derive(Debug, AsBytes, FromBytes, FromZeroes)]
 #[repr(C)]
 struct Control {
