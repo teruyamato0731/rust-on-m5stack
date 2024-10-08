@@ -1,25 +1,18 @@
-mod axp192;
-mod mcp2515;
-
-use std::time::Instant;
-
 use anyhow::Context as _;
+use core2::axp192::Axp192;
+use core2::mcp2515::{CanFrame, MCP2515};
 use embedded_can::nb::Can;
+use embedded_can::{Frame, StandardId};
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::spi::{SpiConfig, SpiDeviceDriver, SpiDriver, SpiDriverConfig};
-
-use embedded_can::{Frame, StandardId};
-use mcp2515::{CanFrame, MCP2515};
-
 use esp_idf_hal::{
     gpio::AnyIOPin,
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
     units::Hertz,
 };
-
-use axp192::Axp192;
+use std::time::Instant;
 
 fn main() {
     esp_idf_svc::sys::link_patches();
@@ -119,7 +112,7 @@ fn i2c_master_init<'d>(
 }
 
 fn m5sc2_init<I2C>(
-    axp: &mut axp192::Axp192<I2C>,
+    axp: &mut core2::axp192::Axp192<I2C>,
     delay: &mut impl embedded_hal::delay::DelayNs,
 ) -> Result<(), I2C::Error>
 where
@@ -138,23 +131,23 @@ where
     axp.set_dcdc3_voltage(2800)?; // LCD backlight
     axp.set_dcdc3_on(true)?;
 
-    axp.set_gpio1_mode(axp192::GpioMode12::NmosOpenDrainOutput)?; // Power LED
+    axp.set_gpio1_mode(core2::axp192::GpioMode12::NmosOpenDrainOutput)?; // Power LED
     axp.set_gpio1_output(false)?; // In open drain modes, state is opposite to what you might
                                   // expect
 
-    axp.set_gpio2_mode(axp192::GpioMode12::NmosOpenDrainOutput)?; // Speaker
+    axp.set_gpio2_mode(core2::axp192::GpioMode12::NmosOpenDrainOutput)?; // Speaker
     axp.set_gpio2_output(true)?;
 
     axp.set_key_mode(
         // Configure how the power button press will work
-        axp192::ShutdownDuration::Sd4s,
-        axp192::PowerOkDelay::Delay64ms,
+        core2::axp192::ShutdownDuration::Sd4s,
+        core2::axp192::PowerOkDelay::Delay64ms,
         true,
-        axp192::LongPress::Lp1000ms,
-        axp192::BootTime::Boot512ms,
+        core2::axp192::LongPress::Lp1000ms,
+        core2::axp192::BootTime::Boot512ms,
     )?;
 
-    axp.set_gpio4_mode(axp192::GpioMode34::NmosOpenDrainOutput)?; // LCD reset control
+    axp.set_gpio4_mode(core2::axp192::GpioMode34::NmosOpenDrainOutput)?; // LCD reset control
 
     axp.set_battery_voltage_adc_enable(true)?;
     axp.set_battery_current_adc_enable(true)?;
