@@ -1,12 +1,13 @@
 mod axp192;
+mod c620;
 mod mcp2515;
 
+use c620::C620;
 use core::cell::RefCell;
 use core2::axp192::Axp192;
 use core2::m5_core2::{i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, m5sc2_init};
 use display_interface_spi::SPIInterfaceNoCS;
 use embedded_can::nb::Can;
-use embedded_can::{Frame, StandardId};
 use embedded_graphics::{
     mono_font::{ascii, MonoTextStyle},
     pixelcolor::Rgb565,
@@ -22,34 +23,9 @@ use esp_idf_hal::{
     uart::{UartConfig, UartDriver},
     units::Hertz,
 };
-use mcp2515::{CanFrame, MCP2515};
+use mcp2515::MCP2515;
 use std::time::Instant;
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
-
-struct C620 {
-    pwm: [i16; 8],
-}
-
-impl C620 {
-    const PWM_MAX: i16 = 16000;
-
-    fn new() -> Self {
-        Self { pwm: [0; 8] }
-    }
-    fn to_msgs(&self) -> [CanFrame; 2] {
-        let mut data = [[0; 8]; 2];
-        for i in 0..4 {
-            data[0][2 * i] = (self.pwm[i] >> 8) as u8;
-            data[0][2 * i + 1] = self.pwm[i] as u8;
-            data[1][2 * i] = (self.pwm[4 + i] >> 8) as u8;
-            data[1][2 * i + 1] = self.pwm[4 + i] as u8;
-        }
-        [
-            CanFrame::new(StandardId::new(0x200).unwrap(), &data[0]).unwrap(),
-            CanFrame::new(StandardId::new(0x199).unwrap(), &data[1]).unwrap(),
-        ]
-    }
-}
 
 // 状態変数 x, \dot{x}, \theta, \theta
 #[derive(Debug, AsBytes, FromBytes, FromZeroes)]
