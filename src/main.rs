@@ -1,12 +1,11 @@
-mod axp192;
-mod c620;
-mod mcp2515;
-
-use c620::C620;
 use core::cell::RefCell;
-use core2::axp192::Axp192;
-use core2::m5_core2::{
-    i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, initialize_display, m5sc2_init,
+use core2::{
+    axp192::Axp192,
+    c620::C620,
+    m5_core2::{
+        i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, initialize_can,
+        initialize_display, m5sc2_init,
+    },
 };
 use embedded_can::nb::Can;
 use embedded_graphics::{
@@ -19,11 +18,10 @@ use embedded_hal_bus::i2c;
 use esp_idf_hal::{
     delay::{FreeRtos, TickType},
     prelude::*,
-    spi::{SpiConfig, SpiDeviceDriver, SpiDriver, SpiDriverConfig},
+    spi::{SpiConfig, SpiDriver, SpiDriverConfig},
     uart::{UartConfig, UartDriver},
     units::Hertz,
 };
-use mcp2515::MCP2515;
 use std::time::Instant;
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
@@ -77,39 +75,21 @@ fn run() -> anyhow::Result<()> {
     // IMUの設定完了
     log::debug!("IMU setup done!");
 
-    let spi = peripherals.spi2;
-    let sclk = peripherals.pins.gpio18;
-    let serial_in = peripherals.pins.gpio38; // SDI
-    let serial_out = peripherals.pins.gpio23; // SDO
-    let cs_can = peripherals.pins.gpio27;
-
     let driver = SpiDriver::new(
-        spi,
-        sclk,
-        serial_out,
-        Some(serial_in),
+        peripherals.spi2,
+        peripherals.pins.gpio18,
+        peripherals.pins.gpio23,
+        Some(peripherals.pins.gpio38),
         &SpiDriverConfig::new(),
     )?;
-
     let config = SpiConfig::new().baudrate(10.MHz().into());
-    let can_spi_master = SpiDeviceDriver::new(&driver, Some(cs_can), &config)?;
-
-    let mut can = MCP2515::new(can_spi_master);
-    can.init(&mut esp_idf_hal::delay::FreeRtos)?;
-    can.set_mode(mcp2515::Mode::Normal, &mut esp_idf_hal::delay::FreeRtos)?;
-
-    // CANの設定完了
-    log::debug!("CAN setup done!");
-
+    let mut can = initialize_can(&driver, peripherals.pins.gpio27, &config);
     let mut display = initialize_display(
         &driver,
-        config,
+        &config,
         peripherals.pins.gpio5.into(),
         peripherals.pins.gpio15.into(),
     );
-
-    // LCDの設定完了
-    log::debug!("LCD setup done!");
 
     // UARTの初期化
     let tx = peripherals.pins.gpio1;

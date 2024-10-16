@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::axp192;
+use crate::{axp192, mcp2515};
 use display_interface_spi::SPIInterfaceNoCS;
 use esp_idf_hal::{
     delay::FreeRtos,
@@ -152,7 +152,7 @@ type DisplayType<'a, 'b> = mipidsi::Display<
 
 pub fn initialize_display<'a, 'b, 'c>(
     driver: &'c SpiDriver<'a>,
-    config: SpiConfig,
+    config: &SpiConfig,
     cs: esp_idf_hal::gpio::AnyOutputPin,
     dc: esp_idf_hal::gpio::AnyOutputPin,
 ) -> DisplayType<'a, 'b>
@@ -160,7 +160,7 @@ where
     'c: 'a,
 {
     let lcd_spi_master =
-        SpiDeviceDriver::new(driver, Some(cs), &config).expect("Failed to initialize SPI device");
+        SpiDeviceDriver::new(driver, Some(cs), config).expect("Failed to initialize SPI device");
 
     let dc = PinDriver::output(dc).expect("Failed to initialize DC pin");
     let spi_iface = SPIInterfaceNoCS::new(lcd_spi_master, dc);
@@ -174,4 +174,19 @@ where
             None::<PinDriver<esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>>,
         )
         .expect("Failed to initialize display")
+}
+
+pub fn initialize_can<'a>(
+    driver: &'a SpiDriver<'a>,
+    cs_pin: impl esp_idf_hal::gpio::OutputPin,
+    config: &'a SpiConfig,
+) -> mcp2515::MCP2515<SpiDeviceDriver<'a, &'a SpiDriver<'a>>> {
+    let can_spi_master = SpiDeviceDriver::new(driver, Some(cs_pin), config)
+        .expect("Failed to create SPI device driver");
+    let mut can = mcp2515::MCP2515::new(can_spi_master);
+    can.init(&mut esp_idf_hal::delay::FreeRtos)
+        .expect("Failed to initialize MCP2515");
+    can.set_mode(mcp2515::Mode::Normal, &mut esp_idf_hal::delay::FreeRtos)
+        .expect("Failed to set mode");
+    can
 }
