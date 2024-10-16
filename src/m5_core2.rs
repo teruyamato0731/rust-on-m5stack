@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 
 use crate::axp192;
+use display_interface_spi::SPIInterfaceNoCS;
 use esp_idf_hal::{
     delay::FreeRtos,
-    gpio::AnyIOPin,
+    gpio::{AnyIOPin, PinDriver},
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
-    prelude::*,
+    spi::{SpiConfig, SpiDeviceDriver, SpiDriver},
     sys::EspError,
     units::Hertz,
 };
@@ -136,4 +137,41 @@ where
     axp.set_ldo3_on(false)?;
     delay.delay_ms(100u32);
     Ok(())
+}
+
+type SpiInterface<'a, 'b> = SPIInterfaceNoCS<
+    SpiDeviceDriver<'a, &'a SpiDriver<'a>>,
+    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
+>;
+
+type DisplayType<'a, 'b> = mipidsi::Display<
+    SpiInterface<'a, 'b>,
+    mipidsi::models::ILI9342CRgb565,
+    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
+>;
+
+pub fn initialize_display<'a, 'b, 'c>(
+    driver: &'c SpiDriver<'a>,
+    config: SpiConfig,
+    cs: esp_idf_hal::gpio::AnyOutputPin,
+    dc: esp_idf_hal::gpio::AnyOutputPin,
+) -> DisplayType<'a, 'b>
+where
+    'c: 'a,
+{
+    let lcd_spi_master =
+        SpiDeviceDriver::new(driver, Some(cs), &config).expect("Failed to initialize SPI device");
+
+    let dc = PinDriver::output(dc).expect("Failed to initialize DC pin");
+    let spi_iface = SPIInterfaceNoCS::new(lcd_spi_master, dc);
+
+    mipidsi::Builder::ili9342c_rgb565(spi_iface)
+        .with_display_size(320, 240)
+        .with_color_order(mipidsi::ColorOrder::Bgr)
+        .with_invert_colors(mipidsi::ColorInversion::Inverted)
+        .init(
+            &mut esp_idf_hal::delay::FreeRtos,
+            None::<PinDriver<esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>>,
+        )
+        .expect("Failed to initialize display")
 }

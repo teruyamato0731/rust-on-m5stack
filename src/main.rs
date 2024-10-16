@@ -5,8 +5,9 @@ mod mcp2515;
 use c620::C620;
 use core::cell::RefCell;
 use core2::axp192::Axp192;
-use core2::m5_core2::{i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, m5sc2_init};
-use display_interface_spi::SPIInterfaceNoCS;
+use core2::m5_core2::{
+    i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, initialize_display, m5sc2_init,
+};
 use embedded_can::nb::Can;
 use embedded_graphics::{
     mono_font::{ascii, MonoTextStyle},
@@ -17,7 +18,6 @@ use embedded_graphics::{
 use embedded_hal_bus::i2c;
 use esp_idf_hal::{
     delay::{FreeRtos, TickType},
-    gpio::PinDriver,
     prelude::*,
     spi::{SpiConfig, SpiDeviceDriver, SpiDriver, SpiDriverConfig},
     uart::{UartConfig, UartDriver},
@@ -81,7 +81,6 @@ fn run() -> anyhow::Result<()> {
     let sclk = peripherals.pins.gpio18;
     let serial_in = peripherals.pins.gpio38; // SDI
     let serial_out = peripherals.pins.gpio23; // SDO
-    let cs_lcd = peripherals.pins.gpio5;
     let cs_can = peripherals.pins.gpio27;
 
     let driver = SpiDriver::new(
@@ -102,8 +101,12 @@ fn run() -> anyhow::Result<()> {
     // CANの設定完了
     log::debug!("CAN setup done!");
 
-    let dc = peripherals.pins.gpio15;
-    let mut display = initialize_display(&driver, config, cs_lcd.into(), dc.into());
+    let mut display = initialize_display(
+        &driver,
+        config,
+        peripherals.pins.gpio5.into(),
+        peripherals.pins.gpio15.into(),
+    );
 
     // LCDの設定完了
     log::debug!("LCD setup done!");
@@ -216,41 +219,4 @@ fn run() -> anyhow::Result<()> {
                 .unwrap();
         }
     }
-}
-
-type SpiInterface<'a, 'b> = SPIInterfaceNoCS<
-    SpiDeviceDriver<'a, &'a SpiDriver<'a>>,
-    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
->;
-
-type DisplayType<'a, 'b> = mipidsi::Display<
-    SpiInterface<'a, 'b>,
-    mipidsi::models::ILI9342CRgb565,
-    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
->;
-
-fn initialize_display<'a, 'b, 'c>(
-    driver: &'c SpiDriver<'a>,
-    config: SpiConfig,
-    cs: esp_idf_hal::gpio::AnyOutputPin,
-    dc: esp_idf_hal::gpio::AnyOutputPin,
-) -> DisplayType<'a, 'b>
-where
-    'c: 'a,
-{
-    let lcd_spi_master =
-        SpiDeviceDriver::new(driver, Some(cs), &config).expect("Failed to initialize SPI device");
-
-    let dc = PinDriver::output(dc).expect("Failed to initialize DC pin");
-    let spi_iface = SPIInterfaceNoCS::new(lcd_spi_master, dc);
-
-    mipidsi::Builder::ili9342c_rgb565(spi_iface)
-        .with_display_size(320, 240)
-        .with_color_order(mipidsi::ColorOrder::Bgr)
-        .with_invert_colors(mipidsi::ColorInversion::Inverted)
-        .init(
-            &mut esp_idf_hal::delay::FreeRtos,
-            None::<PinDriver<esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>>,
-        )
-        .expect("Failed to initialize display")
 }
