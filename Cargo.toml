@@ -44,5 +44,7 @@ nb = "1.1.0"
 zerocopy = { version = "0.7.35", features = ["derive"] }
 cobs-rs = "1.1.2"
 
+nalgebra = { version = "0.33" }
+
 [build-dependencies]
 embuild = "0.31.3"

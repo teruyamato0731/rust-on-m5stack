@@ -7,6 +7,7 @@ use core2::{
         initialize_display, m5sc2_init,
     },
     packet::{Control, State},
+    ukf::UnscentedKalmanFilter,
 };
 use embedded_can::nb::Can;
 use embedded_graphics::{
@@ -23,6 +24,7 @@ use esp_idf_hal::{
     uart::{UartConfig, UartDriver},
     units::Hertz,
 };
+use nalgebra::{matrix, vector};
 use std::time::Instant;
 use zerocopy::{AsBytes, FromBytes};
 
@@ -104,6 +106,23 @@ fn run() -> anyhow::Result<()> {
     .expect("Failed to draw text");
 
     let mut c620 = C620::new();
+    let p = matrix![
+        10.0, 0.0, 0.0, 0.0;
+        0.0, 10.0, 0.0, 0.0;
+        0.0, 0.0, 10.0, 0.0;
+        0.0, 0.0, 0.0, 10.0;
+    ];
+    let q = matrix![
+        0.0, 0.0, 0.0, 0.0;
+        0.0, 1.0, 0.0, 0.0;
+        0.0, 0.0, 0.25, 0.5;
+        0.0, 0.0, 0.5, 1.0;
+    ];
+    let r = matrix![
+        0.5, 0.0;
+        0.0, 0.5;
+    ];
+    let mut _ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
 
     let mut pre = Instant::now();
     loop {
@@ -133,6 +152,9 @@ fn run() -> anyhow::Result<()> {
         };
 
         c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
+
+        // ukf.predict(control.u, fx);
+        // ukf.update(&x_obs, hx);
 
         // Send a message every 500 ms
         let wait = core::time::Duration::from_millis(500);
