@@ -6,6 +6,7 @@ use core2::{
         i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, initialize_can,
         initialize_display, m5sc2_init,
     },
+    packet::{Control, State},
 };
 use embedded_can::nb::Can;
 use embedded_graphics::{
@@ -23,23 +24,7 @@ use esp_idf_hal::{
     units::Hertz,
 };
 use std::time::Instant;
-use zerocopy::{AsBytes, FromBytes, FromZeroes};
-
-// 状態変数 x, \dot{x}, \theta, \theta
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
-#[repr(C)]
-struct State {
-    x: f32,
-    dx: f32,
-    theta: f32,
-    dtheta: f32,
-}
-
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
-#[repr(C)]
-struct Control {
-    u: i16,
-}
+use zerocopy::{AsBytes, FromBytes};
 
 fn main() {
     esp_idf_svc::sys::link_patches();
@@ -136,9 +121,8 @@ fn run() -> anyhow::Result<()> {
 
         // UARTからデータを読み取る
         let mut buf = [0u8; 4];
-        let timeout = TickType::new_millis(1000);
+        let timeout = TickType::new_millis(20);
         let len = uart.read(&mut buf, timeout.into())?;
-        // println!("Received from UART: {:?}, len: {}", buf, len);
 
         // 4バイトの正常なデータを受信したら、制御入力として解釈
         let control = if len == 4 && buf[3] == 0 {
