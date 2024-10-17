@@ -4,7 +4,7 @@ use crate::{axp192, mcp2515};
 use display_interface_spi::SPIInterfaceNoCS;
 use esp_idf_hal::{
     delay::FreeRtos,
-    gpio::{AnyIOPin, PinDriver},
+    gpio::{AnyIOPin, AnyOutputPin, Output, OutputPin, PinDriver},
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
     spi::{SpiConfig, SpiDeviceDriver, SpiDriver},
@@ -139,26 +139,21 @@ where
     Ok(())
 }
 
-type SpiInterface<'a, 'b> = SPIInterfaceNoCS<
-    SpiDeviceDriver<'a, &'a SpiDriver<'a>>,
-    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
->;
+type SpiInterface<'a> =
+    SPIInterfaceNoCS<SpiDeviceDriver<'a, &'a SpiDriver<'a>>, PinDriver<'a, AnyOutputPin, Output>>;
 
-type DisplayType<'a, 'b> = mipidsi::Display<
-    SpiInterface<'a, 'b>,
+type DisplayType<'a> = mipidsi::Display<
+    SpiInterface<'a>,
     mipidsi::models::ILI9342CRgb565,
-    PinDriver<'b, esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>,
+    PinDriver<'a, AnyOutputPin, Output>,
 >;
 
-pub fn initialize_display<'a, 'b, 'c>(
-    driver: &'c SpiDriver<'a>,
+pub fn initialize_display<'a>(
+    driver: &'a SpiDriver<'a>,
     config: &SpiConfig,
-    cs: esp_idf_hal::gpio::AnyOutputPin,
-    dc: esp_idf_hal::gpio::AnyOutputPin,
-) -> DisplayType<'a, 'b>
-where
-    'c: 'a,
-{
+    cs: AnyOutputPin,
+    dc: AnyOutputPin,
+) -> DisplayType<'a> {
     let lcd_spi_master =
         SpiDeviceDriver::new(driver, Some(cs), config).expect("Failed to initialize SPI device");
 
@@ -171,14 +166,14 @@ where
         .with_invert_colors(mipidsi::ColorInversion::Inverted)
         .init(
             &mut esp_idf_hal::delay::FreeRtos,
-            None::<PinDriver<esp_idf_hal::gpio::AnyOutputPin, esp_idf_hal::gpio::Output>>,
+            None::<PinDriver<AnyOutputPin, Output>>,
         )
         .expect("Failed to initialize display")
 }
 
 pub fn initialize_can<'a>(
     driver: &'a SpiDriver<'a>,
-    cs_pin: impl esp_idf_hal::gpio::OutputPin,
+    cs_pin: impl OutputPin,
     config: &'a SpiConfig,
 ) -> mcp2515::MCP2515<SpiDeviceDriver<'a, &'a SpiDriver<'a>>> {
     let can_spi_master = SpiDeviceDriver::new(driver, Some(cs_pin), config)
