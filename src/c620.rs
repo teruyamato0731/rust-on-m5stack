@@ -1,6 +1,7 @@
 use crate::mcp2515::CanFrame;
 use embedded_can::{Frame, StandardId};
 
+#[derive(Default, Debug)]
 pub struct C620 {
     pub pwm: [i16; 8],
 }
@@ -9,7 +10,7 @@ impl C620 {
     pub const PWM_MAX: i16 = 16000;
 
     pub fn new() -> Self {
-        Self { pwm: [0; 8] }
+        Self::default()
     }
     pub fn to_msgs(&self) -> [CanFrame; 2] {
         let mut data = [[0; 8]; 2];
