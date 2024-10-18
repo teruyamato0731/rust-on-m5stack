@@ -3,7 +3,6 @@
 use crate::{axp192, mcp2515};
 use display_interface_spi::SPIInterfaceNoCS;
 use esp_idf_hal::{
-    delay::FreeRtos,
     gpio::{AnyIOPin, AnyOutputPin, Output, OutputPin, PinDriver},
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
@@ -11,69 +10,6 @@ use esp_idf_hal::{
     sys::EspError,
     units::Hertz,
 };
-
-const SLAVE_ADDR: u8 = 0x68;
-const CONFIG: u8 = 0x1A;
-// const GYRO_CONFIG: u8 = 0x1B;
-// const ACCEL_CONFIG: u8 = 0x1C;
-const WHOAMI: u8 = 0x75;
-const PWR_MGMT_1: u8 = 0x6B;
-const ACCEL_XOUT_H: u8 = 0x3B;
-const GYRO_XOUT_H: u8 = 0x43;
-
-pub fn imu_init<I2C>(i2c_master: &mut I2C) -> Result<(), I2C::Error>
-where
-    I2C: embedded_hal::i2c::I2c,
-{
-    i2c_master.write(SLAVE_ADDR, &[WHOAMI])?;
-    let mut tmp = [0];
-    i2c_master.read(SLAVE_ADDR, &mut tmp)?;
-    log::debug!("WHOAMI: {:#X}", tmp[0]);
-    assert_eq!(tmp[0], 0x19);
-
-    // reset
-    i2c_master.write(SLAVE_ADDR, &[PWR_MGMT_1, 0x80])?;
-    // wait for reset
-    FreeRtos::delay_ms(15);
-    // activate gyro and accel
-    i2c_master.write(SLAVE_ADDR, &[PWR_MGMT_1, 0x01])?;
-    // set gyro range to +-500 deg/s and accel range to +-4g
-    i2c_master.write(SLAVE_ADDR, &[CONFIG, 0x1A, 0x08, 0x08])?;
-
-    Ok(())
-}
-
-pub fn imu_read_accel<I2C>(i2c_master: &mut I2C) -> Result<(f32, f32, f32), I2C::Error>
-where
-    I2C: embedded_hal::i2c::I2c,
-{
-    i2c_master.write(SLAVE_ADDR, &[ACCEL_XOUT_H])?;
-    let mut buffer = [0; 6];
-    i2c_master.read(SLAVE_ADDR, &mut buffer)?;
-    Ok((
-        conv((buffer[0] as i16) << 8 | buffer[1] as i16, 4.0 * 9.8),
-        conv((buffer[2] as i16) << 8 | buffer[3] as i16, 4.0 * 9.8),
-        conv((buffer[4] as i16) << 8 | buffer[5] as i16, 4.0 * 9.8),
-    ))
-}
-
-pub fn imu_read_gyro<I2C>(i2c_master: &mut I2C) -> Result<(f32, f32, f32), I2C::Error>
-where
-    I2C: embedded_hal::i2c::I2c,
-{
-    i2c_master.write(SLAVE_ADDR, &[GYRO_XOUT_H])?;
-    let mut buffer = [0; 6];
-    i2c_master.read(SLAVE_ADDR, &mut buffer)?;
-    Ok((
-        conv((buffer[0] as i16) << 8 | buffer[1] as i16, 500.0),
-        conv((buffer[2] as i16) << 8 | buffer[3] as i16, 500.0),
-        conv((buffer[4] as i16) << 8 | buffer[5] as i16, 500.0),
-    ))
-}
-
-fn conv(representation: i16, scale: f32) -> f32 {
-    scale / i16::MAX as f32 * representation as f32
-}
 
 pub fn i2c_master_init<'d>(
     i2c: impl Peripheral<P = impl I2c> + 'd,

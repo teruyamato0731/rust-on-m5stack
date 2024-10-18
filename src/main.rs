@@ -2,10 +2,8 @@ use core::cell::RefCell;
 use core2::{
     axp192::Axp192,
     c620::C620,
-    m5_core2::{
-        i2c_master_init, imu_init, imu_read_accel, imu_read_gyro, initialize_can,
-        initialize_display, m5sc2_init,
-    },
+    m5_core2::{i2c_master_init, initialize_can, initialize_display, m5sc2_init},
+    mpu6886::Mpu6886,
     packet::{Control, State},
     ukf::UnscentedKalmanFilter,
 };
@@ -57,7 +55,7 @@ fn run() -> anyhow::Result<()> {
     // 電源の設定完了
     log::debug!("Power setup done!");
 
-    imu_init(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+    let mut imu = Mpu6886::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init()?;
 
     // IMUの設定完了
     log::debug!("IMU setup done!");
@@ -126,8 +124,8 @@ fn run() -> anyhow::Result<()> {
 
     let mut pre = Instant::now();
     loop {
-        let acc = imu_read_accel(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
-        let gyro = imu_read_gyro(&mut i2c::RefCellDevice::new(&i2c_ref_cell))?;
+        let acc = imu.read_accel()?;
+        let gyro = imu.read_gyro()?;
 
         // Receive a message
         match can.receive() {
