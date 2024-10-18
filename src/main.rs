@@ -1,3 +1,4 @@
+extern crate nalgebra as na;
 use core::cell::RefCell;
 use core2::{
     c620::C620,
@@ -21,7 +22,7 @@ use esp_idf_hal::{
     spi::{SpiConfig, SpiDriver, SpiDriverConfig},
 };
 use nalgebra::{matrix, vector};
-use std::time::Instant;
+use std::{f32::consts::PI, time::Instant};
 use zerocopy::{AsBytes, FromBytes};
 
 fn main() {
@@ -89,7 +90,7 @@ fn run() -> anyhow::Result<()> {
         0.5, 0.0;
         0.0, 0.5;
     ];
-    let mut _ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
+    let mut ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
 
     let mut pre = Instant::now();
     loop {
@@ -97,12 +98,8 @@ fn run() -> anyhow::Result<()> {
         let gyro = imu.read_gyro()?;
 
         // Receive a message
-        match can.receive() {
-            Ok(frame) => log::info!("Received frame {:?}", frame),
-            Err(nb::Error::WouldBlock) => {
-                log::trace!("No message to read!")
-            }
-            Err(e) => log::error!("Error receiving frame: {:?}", e),
+        if let Ok(frame) = can.receive() {
+            c620.parse_packet(&frame);
         }
 
         // UARTからデータを読み取る
@@ -120,8 +117,9 @@ fn run() -> anyhow::Result<()> {
 
         c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
 
-        // ukf.predict(control.u, fx);
-        // ukf.update(&x_obs, hx);
+        ukf.predict(control.u as f32, fx);
+        let x_obs = vector![c620.rx[0].rpm as f32, gyro.0 as f32];
+        ukf.update(&x_obs, hx);
 
         // Send a message every 500 ms
         let wait = core::time::Duration::from_millis(500);
@@ -138,38 +136,51 @@ fn run() -> anyhow::Result<()> {
             }
 
             // 状態変数を送信
-            let s = State {
-                x: 1.2,
-                dx: 3.4,
-                theta: 5.6,
-                dtheta: 7.8,
-            };
+            let s: State = ukf.state().into();
             let buf = s.as_bytes();
             let cobs = cobs_rs::stuff::<16, 18>(buf.try_into().unwrap(), 0);
             let _len = uart.write(&cobs)?;
 
-            let style = MonoTextStyle::new(&ascii::FONT_9X18_BOLD, RgbColor::WHITE);
             display.clear(Rgb565::BLACK).unwrap();
-            // Draw with embedded_graphics
-            Text::with_alignment(
-                &format!("control: {}, {}", control.u, c620.pwm[0]),
-                Point::new(160, 120),
-                style,
-                embedded_graphics::text::Alignment::Center,
-            )
-            .draw(&mut display)
-            .unwrap();
 
             // 数字を埋め込んで表示
-            // acc: %d\n gyro: %d
             let text = format!(
-                " acc: ({:6.2},{:6.2},{:6.2})\ngyro: ({:6.2},{:6.2},{:6.2})",
-                acc.0, acc.1, acc.2, gyro.0, gyro.1, gyro.2
+                "control: {:6} {:6}\nacc: ({:6.2},{:6.2},{:6.2})\ngyro: ({:6.2},{:6.2},{:6.2})",
+                control.u, c620.pwm[0], acc.0, acc.1, acc.2, gyro.0, gyro.1, gyro.2
             );
-
+            let style = MonoTextStyle::new(&ascii::FONT_9X18_BOLD, RgbColor::WHITE);
+            // Draw with embedded_graphics
             Text::new(&text, Point::new(20, 30), style)
                 .draw(&mut display)
                 .unwrap();
         }
     }
+}
+
+// 状態遷移関数
+const M1: f32 = 150e-3;
+const R_W: f32 = 50e-3;
+const M2: f32 = 2.3 - 2.0 * M1 + 2.0;
+const L: f32 = 0.2474; // 重心までの距離
+const J1: f32 = M1 * R_W * R_W;
+const J2: f32 = 0.2;
+const G: f32 = 9.81;
+const KT: f32 = 0.15; // m2006
+const D: f32 = (M1 + M2 + J1 / R_W * R_W) * (M2 * L * L + J2) - M2 * M2 * L * L;
+const DT: f32 = 0.01;
+fn fx(state: &na::Vector4<f32>, u: f32) -> na::Vector4<f32> {
+    let mut x = *state;
+    x[3] += ((M1 + M2 + J1 / R_W * R_W) / D * M2 * G * L * x[2] - M2 * L / D / R_W * KT * u) * DT;
+    x[2] += x[3] * DT;
+    x[1] += (-M2 * M2 * G * L * L / D * x[2] + (M2 * L * L + J2) / D / R_W * KT * u) * DT;
+    x[0] += x[1] * DT;
+    x
+}
+
+// 観測関数
+fn hx(state: &na::Vector4<f32>) -> na::Vector2<f32> {
+    vector![
+        60.0 / (2.0 * PI * R_W) * state[1], // 駆動輪のオドメトリ [m/s] -> [rpm]
+        state[3],                           // 角速度 [rad/s]
+    ]
 }
