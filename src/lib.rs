@@ -4,4 +4,5 @@ pub mod m5_core2;
 pub mod mcp2515;
 pub mod mpu6886;
 pub mod packet;
+pub mod power;
 pub mod ukf;

@@ -1,10 +1,10 @@
 use core::cell::RefCell;
 use core2::{
-    axp192::Axp192,
     c620::C620,
-    m5_core2::{i2c_master_init, initialize_can, initialize_display, initialize_uart, m5sc2_init},
+    m5_core2::{i2c_master_init, initialize_can, initialize_display, initialize_uart},
     mpu6886::Mpu6886,
     packet::{Control, State},
+    power::Power,
     ukf::UnscentedKalmanFilter,
 };
 use embedded_can::nb::Can;
@@ -46,9 +46,7 @@ fn run() -> anyhow::Result<()> {
 
     let i2c_ref_cell = RefCell::new(i2c_master);
 
-    // let mut axp = Axp192::new(i2c_master);
-    let mut axp = Axp192::new(i2c::RefCellDevice::new(&i2c_ref_cell));
-    m5sc2_init(&mut axp, &mut FreeRtos)?;
+    let _ = Power::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init(&mut FreeRtos)?;
 
     // 電源の設定完了
     log::debug!("Power setup done!");
