@@ -93,7 +93,7 @@ fn run() -> anyhow::Result<()> {
     ];
     let mut ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
 
-    let mut control = Control { u: 0 };
+    let mut control = Control::default();
 
     let mut pre = Instant::now();
     let mut last_recv = Instant::now();

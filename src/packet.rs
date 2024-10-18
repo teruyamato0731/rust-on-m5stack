@@ -2,7 +2,7 @@ use nalgebra::Vector4;
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 // 状態変数 x, \dot{x}, \theta, \theta
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
+#[derive(Debug, AsBytes, FromBytes, FromZeroes, Default)]
 #[repr(C)]
 pub struct State {
     pub x: f32,
@@ -11,7 +11,7 @@ pub struct State {
     pub dtheta: f32,
 }
 
-#[derive(Debug, AsBytes, FromBytes, FromZeroes)]
+#[derive(Debug, AsBytes, FromBytes, FromZeroes, Default)]
 #[repr(C)]
 pub struct Control {
     pub u: i16,
