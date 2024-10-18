@@ -23,21 +23,17 @@ pub fn i2c_master_init<'d>(
     Ok(driver)
 }
 
-type SpiInterface<'a> =
-    SPIInterfaceNoCS<SpiDeviceDriver<'a, &'a SpiDriver<'a>>, PinDriver<'a, AnyOutputPin, Output>>;
+type SpiInterface<'a, DC> = SPIInterfaceNoCS<SpiDeviceDriver<'a, &'a SpiDriver<'a>>, DC>;
 
-type DisplayType<'a> = mipidsi::Display<
-    SpiInterface<'a>,
-    mipidsi::models::ILI9342CRgb565,
-    PinDriver<'a, AnyOutputPin, Output>,
->;
+type DisplayType<'a, DC> =
+    mipidsi::Display<SpiInterface<'a, DC>, mipidsi::models::ILI9342CRgb565, DC>;
 
 pub fn initialize_display<'a>(
     driver: &'a SpiDriver<'a>,
     config: &SpiConfig,
     cs: AnyOutputPin,
     dc: AnyOutputPin,
-) -> DisplayType<'a> {
+) -> DisplayType<'a, PinDriver<'a, AnyOutputPin, Output>> {
     let lcd_spi_master =
         SpiDeviceDriver::new(driver, Some(cs), config).expect("Failed to initialize SPI device");
 
