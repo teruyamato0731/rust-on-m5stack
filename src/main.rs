@@ -39,8 +39,8 @@ fn run() -> anyhow::Result<()> {
 
     let i2c_master = i2c_master_init(
         peripherals.i2c0,
-        peripherals.pins.gpio21.into(),
-        peripherals.pins.gpio22.into(),
+        peripherals.pins.gpio21,
+        peripherals.pins.gpio22,
         400.kHz().into(),
     )?;
 

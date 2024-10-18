@@ -14,8 +14,8 @@ use esp_idf_hal::{
 
 pub fn i2c_master_init<'d>(
     i2c: impl Peripheral<P = impl I2c> + 'd,
-    sda: AnyIOPin,
-    scl: AnyIOPin,
+    sda: impl Peripheral<P = impl InputPin + OutputPin> + 'd,
+    scl: impl Peripheral<P = impl InputPin + OutputPin> + 'd,
     baudrate: Hertz,
 ) -> Result<I2cDriver<'d>, EspError> {
     let config = I2cConfig::new().baudrate(baudrate);
