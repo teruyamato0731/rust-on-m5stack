@@ -34,64 +34,43 @@ fn main() {
 fn run() -> anyhow::Result<()> {
     let peripherals = Peripherals::take()?;
 
-    // setup
-    log::debug!("setup start!");
-
+    // init Peripherals begin
     let i2c_master = i2c_master_init(
         peripherals.i2c0,
         peripherals.pins.gpio21,
         peripherals.pins.gpio22,
         400.kHz().into(),
     )?;
-
-    let i2c_ref_cell = RefCell::new(i2c_master);
-
-    let _ = Power::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init(&mut FreeRtos)?;
-
-    // 電源の設定完了
-    log::debug!("Power setup done!");
-
-    let mut imu = Mpu6886::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init()?;
-
-    // IMUの設定完了
-    log::debug!("IMU setup done!");
-
-    let driver = SpiDriver::new(
+    let spi_driver = SpiDriver::new(
         peripherals.spi2,
         peripherals.pins.gpio18,
         peripherals.pins.gpio23,
         Some(peripherals.pins.gpio38),
         &SpiDriverConfig::new(),
     )?;
-    let config = SpiConfig::new().baudrate(10.MHz().into());
-    let mut can = initialize_can(&driver, peripherals.pins.gpio27, &config);
-    let mut display = initialize_display(
-        &driver,
-        &config,
-        peripherals.pins.gpio5.into(),
-        peripherals.pins.gpio15.into(),
-    );
-
-    // UARTの初期化
     let uart = initialize_uart(
         peripherals.uart0,
         peripherals.pins.gpio1,
         peripherals.pins.gpio3,
     )?;
+    // init Peripherals end
 
-    // Make the display all green
-    display
-        .clear(Rgb565::GREEN)
-        .expect("Failed to clear display");
-    // Draw with embedded_graphics
-    Text::with_alignment(
-        "hinge",
-        Point::new(160, 120),
-        MonoTextStyle::new(&ascii::FONT_9X18_BOLD, RgbColor::BLACK),
-        embedded_graphics::text::Alignment::Center,
-    )
-    .draw(&mut display)
-    .expect("Failed to draw text");
+    // init i2c device begin
+    let i2c_ref_cell = RefCell::new(i2c_master);
+    let _ = Power::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init(&mut FreeRtos)?;
+    let mut imu = Mpu6886::new(i2c::RefCellDevice::new(&i2c_ref_cell)).init()?;
+    // init i2c device end
+
+    // init spi device begin
+    let config = SpiConfig::new().baudrate(10.MHz().into());
+    let mut can = initialize_can(&spi_driver, peripherals.pins.gpio27, &config);
+    let mut display = initialize_display(
+        &spi_driver,
+        &config,
+        peripherals.pins.gpio5.into(),
+        peripherals.pins.gpio15.into(),
+    );
+    // init spi device end
 
     let mut c620 = C620::new();
     let p = matrix![
