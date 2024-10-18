@@ -20,6 +20,7 @@ use esp_idf_hal::{
     delay::{FreeRtos, TickType},
     prelude::*,
     spi::{SpiConfig, SpiDriver, SpiDriverConfig},
+    uart::UartDriver,
 };
 use nalgebra::{matrix, vector};
 use std::{f32::consts::PI, time::Instant};
@@ -92,7 +93,10 @@ fn run() -> anyhow::Result<()> {
     ];
     let mut ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
 
+    let mut control = Control { u: 0 };
+
     let mut pre = Instant::now();
+    let mut last_recv = Instant::now();
     loop {
         let acc = imu.read_accel()?;
         let gyro = imu.read_gyro()?;
@@ -102,20 +106,16 @@ fn run() -> anyhow::Result<()> {
             c620.parse_packet(&frame);
         }
 
-        // UARTからデータを読み取る
-        let mut buf = [0u8; 4];
-        let timeout = TickType::new_millis(20);
-        let len = uart.read(&mut buf, timeout.into())?;
-
-        // 4バイトの正常なデータを受信したら、制御入力として解釈
-        let control = if len == 4 && buf[3] == 0 {
-            let (buf, _): ([u8; 2], usize) = cobs_rs::unstuff(buf, 0);
-            Control::read_from(&buf).unwrap()
-        } else {
-            Control { u: 0 }
+        // UARTから制御信号を受信
+        if let Some(c) = read_control(&uart) {
+            control = c;
+            last_recv = Instant::now();
         };
 
-        c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
+        // 制御信号が一定時間受信されない場合、モータを停止
+        if last_recv.elapsed() > core::time::Duration::from_millis(20) {
+            control.u = 0;
+        }
 
         ukf.predict(control.u as f32, fx);
         let x_obs = vector![c620.rx[0].rpm as f32, gyro.0 as f32];
@@ -126,6 +126,7 @@ fn run() -> anyhow::Result<()> {
         if pre.elapsed() > wait {
             pre = Instant::now();
 
+            c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
             let frames = c620.to_msgs();
             for frame in frames.iter() {
                 if let Err(e) = can.transmit(frame) {
@@ -183,4 +184,17 @@ fn hx(state: &na::Vector4<f32>) -> na::Vector2<f32> {
         60.0 / (2.0 * PI * R_W) * state[1], // 駆動輪のオドメトリ [m/s] -> [rpm]
         state[3],                           // 角速度 [rad/s]
     ]
+}
+
+fn read_control(uart: &UartDriver) -> Option<Control> {
+    let mut buf = [0u8; 4];
+    let timeout = TickType::new_millis(3);
+    let len = uart.read(&mut buf, timeout.into()).unwrap();
+
+    if len == 4 && buf[3] == 0 {
+        let (buf, _): ([u8; 2], usize) = cobs_rs::unstuff(buf, 0);
+        Control::read_from(&buf)
+    } else {
+        None
+    }
 }
