@@ -1,3 +1,4 @@
+use nalgebra::Vector4;
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 // 状態変数 x, \dot{x}, \theta, \theta
@@ -41,5 +42,16 @@ impl Control {
     pub fn from_cobs(buf: &[u8; 4]) -> Option<Self> {
         let (cobs, _): ([u8; 2], _) = cobs_rs::unstuff(*buf, 0);
         Self::read_from(&cobs)
+    }
+}
+
+impl From<Vector4<f32>> for State {
+    fn from(v: Vector4<f32>) -> Self {
+        Self {
+            x: v[0],
+            dx: v[1],
+            theta: v[2],
+            dtheta: v[3],
+        }
     }
 }
