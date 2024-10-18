@@ -86,8 +86,8 @@ fn run() -> anyhow::Result<()> {
         peripherals.uart0,
         tx,
         rx,
-        Option::<esp_idf_hal::gpio::Gpio0>::None,
-        Option::<esp_idf_hal::gpio::Gpio1>::None,
+        Option::<esp_idf_hal::gpio::AnyIOPin>::None,
+        Option::<esp_idf_hal::gpio::AnyIOPin>::None,
         &uart_config,
     )?;
 
