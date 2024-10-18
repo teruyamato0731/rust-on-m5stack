@@ -48,16 +48,16 @@ fn run() -> anyhow::Result<()> {
 
     let i2c_master = core2::m5_core2::i2c_master_init(
         peripherals.i2c0,
-        peripherals.pins.gpio21.into(),
-        peripherals.pins.gpio22.into(),
+        peripherals.pins.gpio21,
+        peripherals.pins.gpio22,
         400.kHz().into(),
     )?;
 
     let i2c_ref_cell = core::cell::RefCell::new(i2c_master);
 
-    // let mut axp = Axp192::new(i2c_master);
-    let mut axp = core2::axp192::Axp192::new(i2c::RefCellDevice::new(&i2c_ref_cell));
-    core2::m5_core2::m5sc2_init(&mut axp, &mut FreeRtos).unwrap();
+    core2::power::Power::new(i2c::RefCellDevice::new(&i2c_ref_cell))
+        .init(&mut FreeRtos)
+        .unwrap();
 
     let spi = peripherals.spi2;
     let sclk = peripherals.pins.gpio18;
