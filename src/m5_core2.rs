@@ -3,11 +3,12 @@
 use crate::{axp192, mcp2515};
 use display_interface_spi::SPIInterfaceNoCS;
 use esp_idf_hal::{
-    gpio::{AnyIOPin, AnyOutputPin, Output, OutputPin, PinDriver},
+    gpio::{AnyIOPin, AnyOutputPin, InputPin, Output, OutputPin, PinDriver},
     i2c::{I2c, I2cConfig, I2cDriver},
     peripheral::Peripheral,
     spi::{SpiConfig, SpiDeviceDriver, SpiDriver},
     sys::EspError,
+    uart::{Uart, UartConfig, UartDriver},
     units::Hertz,
 };
 
@@ -120,4 +121,21 @@ pub fn initialize_can<'a>(
     can.set_mode(mcp2515::Mode::Normal, &mut esp_idf_hal::delay::FreeRtos)
         .expect("Failed to set mode");
     can
+}
+
+pub fn initialize_uart<'d>(
+    uart: impl Peripheral<P = impl Uart> + 'd,
+    tx: impl Peripheral<P = impl OutputPin> + 'd,
+    rx: impl Peripheral<P = impl InputPin> + 'd,
+) -> Result<UartDriver<'d>, EspError> {
+    let uart_config = UartConfig::new().baudrate(Hertz(115_200));
+    let uart = UartDriver::new(
+        uart,
+        tx,
+        rx,
+        Option::<AnyIOPin>::None,
+        Option::<AnyIOPin>::None,
+        &uart_config,
+    )?;
+    Ok(uart)
 }

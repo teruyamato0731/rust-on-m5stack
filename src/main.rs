@@ -2,7 +2,7 @@ use core::cell::RefCell;
 use core2::{
     axp192::Axp192,
     c620::C620,
-    m5_core2::{i2c_master_init, initialize_can, initialize_display, m5sc2_init},
+    m5_core2::{i2c_master_init, initialize_can, initialize_display, initialize_uart, m5sc2_init},
     mpu6886::Mpu6886,
     packet::{Control, State},
     ukf::UnscentedKalmanFilter,
@@ -19,8 +19,6 @@ use esp_idf_hal::{
     delay::{FreeRtos, TickType},
     prelude::*,
     spi::{SpiConfig, SpiDriver, SpiDriverConfig},
-    uart::{UartConfig, UartDriver},
-    units::Hertz,
 };
 use nalgebra::{matrix, vector};
 use std::time::Instant;
@@ -77,16 +75,10 @@ fn run() -> anyhow::Result<()> {
     );
 
     // UARTの初期化
-    let tx = peripherals.pins.gpio1;
-    let rx = peripherals.pins.gpio3;
-    let uart_config = UartConfig::new().baudrate(Hertz(115_200));
-    let uart = UartDriver::new(
+    let uart = initialize_uart(
         peripherals.uart0,
-        tx,
-        rx,
-        Option::<esp_idf_hal::gpio::AnyIOPin>::None,
-        Option::<esp_idf_hal::gpio::AnyIOPin>::None,
-        &uart_config,
+        peripherals.pins.gpio1,
+        peripherals.pins.gpio3,
     )?;
 
     // Make the display all green
