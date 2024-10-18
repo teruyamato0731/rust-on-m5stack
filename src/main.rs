@@ -75,23 +75,7 @@ fn run() -> anyhow::Result<()> {
     // init spi device end
 
     let mut c620 = C620::new();
-    let p = matrix![
-        10.0, 0.0, 0.0, 0.0;
-        0.0, 10.0, 0.0, 0.0;
-        0.0, 0.0, 10.0, 0.0;
-        0.0, 0.0, 0.0, 10.0;
-    ];
-    let q = matrix![
-        0.0, 0.0, 0.0, 0.0;
-        0.0, 1.0, 0.0, 0.0;
-        0.0, 0.0, 0.25, 0.5;
-        0.0, 0.0, 0.5, 1.0;
-    ];
-    let r = matrix![
-        0.5, 0.0;
-        0.0, 0.5;
-    ];
-    let mut ukf = UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r);
+    let mut ukf = init_ukf();
 
     let mut control = Control::default();
 
@@ -197,4 +181,24 @@ fn read_control(uart: &UartDriver) -> Option<Control> {
     } else {
         None
     }
+}
+
+fn init_ukf() -> UnscentedKalmanFilter {
+    let p = matrix![
+        10.0, 0.0, 0.0, 0.0;
+        0.0, 10.0, 0.0, 0.0;
+        0.0, 0.0, 10.0, 0.0;
+        0.0, 0.0, 0.0, 10.0;
+    ];
+    let q = matrix![
+        0.0, 0.0, 0.0, 0.0;
+        0.0, 1.0, 0.0, 0.0;
+        0.0, 0.0, 0.25, 0.5;
+        0.0, 0.0, 0.5, 1.0;
+    ];
+    let r = matrix![
+        0.5, 0.0;
+        0.0, 0.5;
+    ];
+    UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r)
 }
