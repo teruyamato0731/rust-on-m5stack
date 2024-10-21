@@ -248,14 +248,11 @@ where
 
     pub fn init(&mut self, delay: &mut impl embedded_hal::delay::DelayNs) -> Result<(), CanError> {
         self.reset(delay)?;
-        self.set_mode(Mode::Configuration, delay)?;
+        self.set_mode(Mode::Configuration)?;
 
         // 1MHz に設定
         self.set_baudrate(1_000_000)?;
         log::trace!("Baudrate set to 1MHz");
-
-        // // CLKOUT ピンを無効化
-        // self.set_clken(false)?;
 
         // Clear all filters
         self.write_registers(0x20, &[0; 4])?;
@@ -293,7 +290,7 @@ where
         self.modify_register(Self::RXB1CTRL, Self::RXB_RX_MASK, Self::RXB_RX_ANY)?;
 
         // Loopback mode を要求
-        self.set_mode(Mode::Loopback, delay)?;
+        self.set_mode(Mode::Loopback)?;
         Ok(())
     }
 
@@ -309,27 +306,7 @@ where
         Ok(())
     }
 
-    pub fn set_mode(
-        &mut self,
-        mode: Mode,
-        delay: &mut impl embedded_hal::delay::DelayNs,
-    ) -> Result<(), CanError> {
-        self.request_mode(mode)?;
-        let start = Instant::now();
-        loop {
-            delay.delay_us(100);
-            let configured = self.verify_mode(mode)?;
-            if configured {
-                log::trace!("Mode verified to Normal");
-                return Ok(());
-            } else if start.elapsed().as_millis() > 200 {
-                panic!("Mode verification failed");
-                // return Err(CanError::other());
-            }
-        }
-    }
-
-    fn request_mode(&mut self, mode: Mode) -> Result<(), CanError> {
+    pub fn set_mode(&mut self, mode: Mode) -> Result<(), CanError> {
         // mode が Sleep だとエラー
         if let Mode::Sleep = mode {
             unimplemented!("Sleep mode is not supported")
@@ -341,10 +318,25 @@ where
         }
 
         // Clear wake flag
-        self.modify_register(Self::CANINTF, 0x40, 0)?;
+        const MCP_WAKIF: u8 = 0x40;
+        self.modify_register(Self::CANINTF, MCP_WAKIF, 0)?;
 
-        self.modify_register(Self::MCP_CANCTRL, Self::MODE_MASK, mode as u8)?;
+        self.request_mode(mode)?;
         Ok(())
+    }
+
+    fn request_mode(&mut self, mode: Mode) -> Result<(), CanError> {
+        let start = Instant::now();
+        loop {
+            self.modify_register(Self::MCP_CANCTRL, Self::MODE_MASK, mode as u8)?;
+            let configured = self.verify_mode(mode)?;
+            if configured {
+                log::trace!("Mode verified to Normal");
+                return Ok(());
+            } else if start.elapsed().as_millis() > 200 {
+                panic!("Mode verification failed");
+            }
+        }
     }
 
     fn verify_mode(&mut self, mode: Mode) -> Result<bool, CanError> {

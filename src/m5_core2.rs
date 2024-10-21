@@ -61,7 +61,7 @@ pub fn initialize_can<'a>(
     let mut can = mcp2515::MCP2515::new(can_spi_master);
     can.init(&mut esp_idf_hal::delay::FreeRtos)
         .expect("Failed to initialize MCP2515");
-    can.set_mode(mcp2515::Mode::Normal, &mut esp_idf_hal::delay::FreeRtos)
+    can.set_mode(mcp2515::Mode::Normal)
         .expect("Failed to set mode");
     can
 }
