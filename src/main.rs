@@ -24,7 +24,6 @@ use esp_idf_hal::{
 };
 use nalgebra::{matrix, vector};
 use std::{f32::consts::PI, time::Instant};
-use zerocopy::{AsBytes, FromBytes};
 
 fn main() {
     esp_idf_svc::sys::link_patches();
@@ -122,8 +121,7 @@ fn run() -> anyhow::Result<()> {
 
             // 状態変数を送信
             let s: State = ukf.state().into();
-            let buf = s.as_bytes();
-            let cobs = cobs_rs::stuff::<16, 18>(buf.try_into().unwrap(), 0);
+            let cobs = s.as_cobs();
             let _len = uart.write(&cobs)?;
 
             display.clear(Rgb565::BLACK).unwrap();
@@ -176,8 +174,7 @@ fn read_control(uart: &UartDriver) -> Option<Control> {
     let len = uart.read(&mut buf, timeout.into()).unwrap();
 
     if len == 4 && buf[3] == 0 {
-        let (buf, _): ([u8; 2], usize) = cobs_rs::unstuff(buf, 0);
-        Control::read_from(&buf)
+        Control::from_cobs(&buf)
     } else {
         None
     }
