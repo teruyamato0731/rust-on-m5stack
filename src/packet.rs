@@ -43,6 +43,11 @@ impl Control {
         let (cobs, _): ([u8; 2], _) = cobs_rs::unstuff(*buf, 0);
         Self::read_from(&cobs)
     }
+    pub fn from_current(current: f64) -> Self {
+        const K: f64 = Control::MAX as f64 / 20.0;
+        let u = (K * current) as i16;
+        Control { u }
+    }
 }
 
 impl From<Vector4<f32>> for State {
