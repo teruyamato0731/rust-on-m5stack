@@ -19,6 +19,33 @@ where
         mut self,
         delay: &mut impl embedded_hal::delay::DelayNs,
     ) -> Result<Self, I2C::Error> {
+        let reg_data_array = [
+            (0x26, 0x6A),       // reg26h DCDC1 3350mV (ESP32 VDD)
+            (0x30, 0b00000010), // reg30h VBUS-IPSOUT Pass-Through Management
+            (0x31, 0b00000100), // reg31h VOFF Shutdown voltage setting (3.0V)
+            (0x32, 0b01000010), // reg32h Enable bat detection
+            (0x33, 0b11000000), // reg33h Charge control 1 (Charge 4.2V, 100mA)
+            (0x35, 0xA2),       // reg35h Enable RTC BAT charge
+            (0x36, 0x0C),       // reg36h 128ms power on, 4s power off
+            (0x40, 0x00),       // reg40h IRQ 1, all disable
+            (0x41, 0x00),       // reg41h IRQ 2, all disable
+            (0x42, 0x03),       // reg42h IRQ 3, power key irq enable
+            (0x43, 0x00),       // reg43h IRQ 4, all disable
+            (0x44, 0x00),       // reg44h IRQ 5, all disable
+            (0x82, 0xFF),       // reg82h ADC all on
+            (0x83, 0x80),       // reg83h ADC temp on
+            (0x84, 0x32),       // reg84h ADC 25Hz
+            (0x90, 0x07),       // reg90h GPIO0(LDOio0) floating
+            (0x91, 0xA0),       // reg91h GPIO0(LDOio0) 2.8V
+            (0x92, 0x02),
+            (0x98, 0x00), // PWM1 X
+            (0x99, 0xFF), // PWM1 Y1
+            (0x9A, 0xFF), // PWM1 Y1
+        ];
+
+        for &(reg, data) in &reg_data_array {
+            self.axp.set_8(reg, data)?;
+        }
         // Default setup for M5Stack Core 2
         self.axp.set_dcdc1_voltage(3350)?; // Voltage to provide to the microcontroller (this one!)
 

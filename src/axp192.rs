@@ -146,7 +146,7 @@ where
         Ok(self.get_8(reg_addr)? & flag != 0)
     }
 
-    fn set_8(&mut self, addr: u8, v: u8) -> Result<(), I2C::Error> {
+    pub(crate) fn set_8(&mut self, addr: u8, v: u8) -> Result<(), I2C::Error> {
         self.i2c.write(AXP192_ADDRESS, &[addr, v])
     }
 
