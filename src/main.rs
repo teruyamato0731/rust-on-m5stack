@@ -81,7 +81,7 @@ fn run() -> anyhow::Result<()> {
     let mut pre = Instant::now();
     let mut last_recv = Instant::now();
     loop {
-        let acc = imu.read_accel()?;
+        // let acc = imu.read_accel()?;
         let gyro = imu.read_gyro()?;
 
         // Receive a message
@@ -109,13 +109,14 @@ fn run() -> anyhow::Result<()> {
         if pre.elapsed() > wait {
             pre = Instant::now();
 
-            c620.pwm[0] = (control.u / 2).clamp(-C620::PWM_MAX, C620::PWM_MAX);
+            c620.pwm[0] = control.u;
+            c620.pwm[1] = -control.u;
             let frames = c620.to_msgs();
             for frame in frames.iter() {
                 if let Err(e) = can.transmit(frame) {
                     log::error!("Error sending frame: {:?}", e);
                 } else {
-                    log::info!("Sent frame {:?}", frame);
+                    log::trace!("Sent frame {:?}", frame);
                 }
             }
 
@@ -128,8 +129,8 @@ fn run() -> anyhow::Result<()> {
 
             // 数字を埋め込んで表示
             let text = format!(
-                "control: {:6} {:6}\nacc: ({:6.2},{:6.2},{:6.2})\ngyro: ({:6.2},{:6.2},{:6.2})",
-                control.u, c620.pwm[0], acc.0, acc.1, acc.2, gyro.0, gyro.1, gyro.2
+                "control: {:6} {:6}\ngyro: ({:6.2},{:6.2},{:6.2})",
+                control.u, c620.pwm[0], gyro.0, gyro.1, gyro.2
             );
             let style = MonoTextStyle::new(&ascii::FONT_9X18_BOLD, RgbColor::WHITE);
             // Draw with embedded_graphics
@@ -164,7 +165,7 @@ fn fx(state: &na::Vector4<f32>, u: f32) -> na::Vector4<f32> {
 fn hx(state: &na::Vector4<f32>) -> na::Vector2<f32> {
     vector![
         60.0 / (2.0 * PI * R_W) * state[1], // 駆動輪のオドメトリ [m/s] -> [rpm]
-        state[3],                           // 角速度 [rad/s]
+        state[3].to_radians(),              // 角速度 [deg/s] -> [rad/s]
     ]
 }
 
@@ -194,8 +195,8 @@ fn init_ukf() -> UnscentedKalmanFilter {
         0.0, 0.0, 0.5, 1.0;
     ];
     let r = matrix![
-        0.5, 0.0;
-        0.0, 0.5;
+        2.0, 0.0;
+        0.0, 200.0;
     ];
     UnscentedKalmanFilter::new(vector![0.0, 0.0, 0.0, 0.0], p, q, r)
 }
