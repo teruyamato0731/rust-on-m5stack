@@ -113,10 +113,7 @@ fn run() -> anyhow::Result<()> {
 
     let mut can = MCP2515::new(can_spi_master);
     can.init(&mut esp_idf_hal::delay::FreeRtos)?;
-    can.set_mode(
-        core2::mcp2515::Mode::Normal,
-        &mut esp_idf_hal::delay::FreeRtos,
-    )?;
+    can.set_mode(core2::mcp2515::Mode::Normal)?;
 
     // CANの設定完了
     log::debug!("CAN setup done!");
