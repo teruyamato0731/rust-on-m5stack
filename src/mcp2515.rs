@@ -193,10 +193,6 @@ impl RxBuf {
     fn data0(&self) -> u8 {
         0x66 + 0x10 * *self as u8
     }
-
-    fn read_rx_buf(&self) -> u8 {
-        0x90 + 0x04 * *self as u8
-    }
 }
 
 pub struct MCP2515<SPI> {
@@ -419,11 +415,6 @@ where
                 Operation::Write(&tx_steam),
             ])
             .map_err(|_| CanError::other())?;
-        // RTS (Request to Send) Command
-        // let rts = tx_buf.rts();
-        // self.spi
-        //     .transaction(&mut [Operation::Write(&[rts])])
-        //     .map_err(|_| CanError::other())?;
 
         // Set `txreq` bit in ctrl register.
         self.modify_register(tx_buf.ctrl(), Self::TXREQ_MASK, Self::TXREQ_MASK)?;
@@ -459,30 +450,39 @@ where
             .map_err(|_| CanError::other())?;
         let rx_buf = self.find_rx_buf(buf[0]).ok_or(nb::Error::WouldBlock)?;
         // READ RX BUFFER INSTRUCTION
-        let read_rx_buf = rx_buf.read_rx_buf();
+        let addr = rx_buf.ctrl();
+        let mut ctrl_byte = [0; 1];
         let mut id_byte = [0; 2];
         let mut id_padding = [0; 2];
         let mut dlc = [0; 1];
         let mut buf = [0; 8];
         self.spi
             .transaction(&mut [
-                Operation::Write(&[read_rx_buf]),
-                Operation::Read(&mut id_byte),
-                Operation::Read(&mut id_padding), // ext id
-                Operation::Read(&mut dlc),
-                Operation::Read(&mut buf),
+                Operation::Write(&[addr]),
+                Operation::Read(&mut ctrl_byte),  // 0x60
+                Operation::Read(&mut id_byte),    // 0x61, 0x62
+                Operation::Read(&mut id_padding), // 0x63, 0x64 for ext id
+                Operation::Read(&mut dlc),        // 0x65
+                Operation::Read(&mut buf),        // 0x66 ~ +8 bytes
             ])
             .map_err(|_| CanError::other())?;
+
+        // CANINTFをクリア
+        self.modify_register(
+            Self::CANINTF,
+            match rx_buf {
+                RxBuf::Rx0 => 0x01,
+                RxBuf::Rx1 => 0x02,
+            },
+            0x00,
+        )?;
+
         let is_extended = id_byte[1] & Self::ID_EXTENDED_MASK != 0;
         if is_extended {
             unimplemented!("Extended ID is not supported")
         }
         let dlc = (dlc[0] & 0xF) as usize;
-        let rtr = if is_extended {
-            dlc & 0x40 != 0
-        } else {
-            id_byte[1] & 0x10 != 0
-        };
+        let rtr = ctrl_byte[0] & 0x40 != 0;
         if rtr {
             unimplemented!("RTR is not supported");
         }
